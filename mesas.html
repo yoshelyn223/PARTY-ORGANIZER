@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organizador de Mesas - Graduación Damaris</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            100: '#FAF4E8',
+                            500: '#D4AF37',
+                            600: '#C5A059',
+                            700: '#A37F35',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-stone-100 font-sans text-stone-800 min-h-screen p-4 sm:p-6">
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- Encabezado -->
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-stone-200">
+            <div>
+                <h1 class="text-2xl font-bold text-stone-900">Recepción y Acomodo de Mesas 🪑</h1>
+                <p class="text-xs text-stone-500">Asignación de asientos en tiempo real - Quinta GCL</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="cargarAsignaciones()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold py-2 px-3 rounded-xl border border-stone-300 flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-rotate"></i> Recargar
+                </button>
+                <a href="admin.html" class="bg-gold-600 hover:bg-gold-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-user-gear"></i> Panel Admin
+                </a>
+            </div>
+        </header>
+
+        <!-- KPI / METRICAS RÁPIDAS -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
+                <span class="text-xs font-bold text-stone-500 uppercase block">Total Confirmados</span>
+                <span id="stat-total-confirmados" class="text-2xl font-extrabold text-stone-900">0</span>
+            </div>
+            <div class="bg-emerald-50 p-4 rounded-2xl shadow-sm border border-emerald-200">
+                <span class="text-xs font-bold text-emerald-700 uppercase block">Ya Sentados 🟢</span>
+                <span id="stat-sentados" class="text-2xl font-extrabold text-emerald-900">0</span>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-2xl shadow-sm border border-amber-200">
+                <span class="text-xs font-bold text-amber-700 uppercase block">Por Llegar / Acomodar ⏳</span>
+                <span id="stat-por-llegar" class="text-2xl font-extrabold text-amber-900">0</span>
+            </div>
+        </div>
+
+        <!-- BUSCADOR RÁPIDO DE INVITADOS -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
+            <label class="block text-xs font-bold text-stone-700 uppercase mb-2">Buscador de Recepción (Escribe la familia que va llegando):</label>
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-stone-400 text-sm"></i>
+                <input type="text" id="input-buscar-recepcion" onkeyup="filtrarListaRecepcion()" placeholder="Ej. Familia Rodríguez o Ana..." class="w-full bg-stone-50 border border-stone-300 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-gold-500 focus:outline-none">
+            </div>
+        </div>
+
+        <!-- VISTA EN DOS COLUMNAS -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- COLUMNA 1: LISTA DE FAMILIAS/INVITADOS Y ESTATUS DE LLEGADA -->
+            <div class="lg:col-span-1 bg-white p-4 rounded-2xl shadow-sm border border-stone-200 space-y-3">
+                <h2 class="font-bold text-stone-900 text-sm flex items-center justify-between border-b pb-2">
+                    <span>Lista de Recepción</span>
+                    <span class="text-[10px] font-normal text-stone-500">Haz clic para asignar mesa</span>
+                </h2>
+                <div id="lista-invitados-recepcion" class="space-y-2 max-h-[550px] overflow-y-auto pr-1">
+                    <p class="text-xs text-stone-400 text-center py-4">Cargando lista...</p>
+                </div>
+            </div>
+
+            <!-- COLUMNA 2: DISTRIBUCIÓN DE MESAS EN LA QUINTA -->
+            <div class="lg:col-span-2 bg-white p-4 rounded-2xl shadow-sm border border-stone-200 space-y-4">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h2 class="font-bold text-stone-900 text-sm">Distribución de Mesas en el Evento</h2>
+                    <button onclick="agregarMesa()" class="bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold py-1.5 px-3 rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> Agregar Mesa
+                    </button>
+                </div>
+
+                <!-- CONTENEDOR GRID DE MESAS -->
+                <div id="grid-mesas" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto p-1">
+                    <!-- Las mesas se generan dinámicamente aquí -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- MODAL PARA ASIGNAR O CAMBIAR DE MESA -->
+    <div id="modal-asignar-mesa" class="fixed inset-0 bg-stone-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-stone-900 text-base" id="modal-titulo-invitado">Asignar Mesa</h3>
+                <button onclick="cerrarModalMesa()" class="text-stone-400 hover:text-stone-600 text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="confirmarAsignacionMesa(event)" class="space-y-3">
+                <input type="hidden" id="modal-familia-id">
+
+                <div>
+                    <label class="block text-xs font-bold text-stone-700 mb-1">Selecciona la Mesa:</label>
+                    <select id="select-numero-mesa" class="w-full border border-stone-300 rounded-xl p-3 text-xs font-semibold focus:ring-2 focus:ring-gold-500 focus:outline-none">
+                        <!-- Opciones de mesa generadas dinámicamente -->
+                    </select>
+                </div>
+
+                <div class="bg-gold-50 p-3 rounded-xl border border-gold-200 text-xs text-gold-900">
+                    <p><strong>Pases a sentar:</strong> <span id="modal-pases-count">0</span> personas</p>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="cerrarModalMesa()" class="px-4 py-2 bg-stone-100 text-stone-600 text-xs font-bold rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl">
+                        <i class="fa-solid fa-chair mr-1"></i> Confirmar y Sentar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT PRINCIPAL & FIREBASE -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5plmv67UUs0pTDUzOgnqboRNU7RW2l4s",
+            authDomain: "graduacion-9f8b0.firebaseapp.com",
+            projectId: "graduacion-9f8b0",
+            storageBucket: "graduacion-9f8b0.firebasestorage.app",
+            messagingSenderId: "1096796639034",
+            appId: "1:1096796639034:web:2d58c06d67be95ce9d4a03",
+            measurementId: "G-F9KKD0LQGX"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        let listaConfirmados = [];
+        let totalMesas = 10; // Cantidad inicial de mesas
+        let capacidadPorMesa = 10; // Personas por mesa estándar
+
+        // Cargar confirmados y sus asignaciones de mesa desde Firestore
+        async function cargarAsignaciones() {
+            try {
+                const snapshot = await db.collection("asistencias").where("asistencia", "==", true).get();
+                listaConfirmados = [];
+
+                let sentadosCount = 0;
+                let porLlegarCount = 0;
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const item = {
+                        docId: doc.id,
+                        familia: data.familia,
+                        nombre: data.nombre || data.familia,
+                        cantPersonas: data.cantPersonas || 1,
+                        numMesa: data.numMesa || null, // Nulo si aún no tiene mesa asignada
+                        sentado: data.sentado || false // booleano si ya ocupó asiento
+                    };
+
+                    if (item.sentado && item.numMesa) {
+                        sentadosCount += item.cantPersonas;
+                    } else {
+                        porLlegarCount += item.cantPersonas;
+                    }
+
+                    listaConfirmados.push(item);
+                });
+
+                document.getElementById('stat-total-confirmados').textContent = sentadosCount + porLlegarCount;
+                document.getElementById('stat-sentados').textContent = sentadosCount;
+                document.getElementById('stat-por-llegar').textContent = porLlegarCount;
+
+                renderizarListaRecepcion(listaConfirmados);
+                renderizarMesas();
+
+            } catch (error) {
+                console.error("Error al cargar lista de mesas:", error);
+            }
+        }
+
+        // Renderizar la lista lateral de recepción
+        function renderizarListaRecepcion(lista) {
+            const cont = document.getElementById('lista-invitados-recepcion');
+            cont.innerHTML = "";
+
+            if (lista.length === 0) {
+                cont.innerHTML = '<p class="text-xs text-stone-400 text-center py-4">No hay invitados confirmados aún.</p>';
+                return;
+            }
+
+            lista.forEach(item => {
+                const div = document.createElement('div');
+                div.className = `p-3 rounded-xl border transition cursor-pointer flex justify-between items-center ${
+                    item.sentado 
+                        ? 'bg-emerald-50 border-emerald-200' 
+                        : 'bg-stone-50 border-stone-200 hover:border-gold-500'
+                }`;
+
+                const badgeMesa = item.numMesa 
+                    ? `<span class="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-lg text-[10px]">Mesa ${item.numMesa}</span>`
+                    : `<span class="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-lg text-[10px]">Sin Mesa</span>`;
+
+                div.innerHTML = `
+                    <div onclick="abrirModalMesa('${item.docId}')">
+                        <p class="font-bold text-xs text-stone-900">${item.familia}</p>
+                        <p class="text-[10px] text-stone-500">${item.cantPersonas} Persona(s) • Contacto: ${item.nombre}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        ${badgeMesa}
+                    </div>
+                `;
+
+                cont.appendChild(div);
+            });
+        }
+
+        // Renderizar cuadrícula de mesas
+        function renderizarMesas() {
+            const grid = document.getElementById('grid-mesas');
+            grid.innerHTML = "";
+
+            for (let i = 1; i <= totalMesas; i++) {
+                const invitadosEnMesa = listaConfirmados.filter(item => parseInt(item.numMesa) === i && item.sentado);
+                const ocupadosCount = invitadosEnMesa.reduce((acc, curr) => acc + curr.cantPersonas, 0);
+
+                const cardMesa = document.createElement('div');
+                cardMesa.className = "bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-2 relative";
+
+                let listaOcupantesHTML = "";
+                if (invitadosEnMesa.length > 0) {
+                    listaOcupantesHTML = invitadosEnMesa.map(inv => `
+                        <div class="flex justify-between items-center text-[11px] bg-white p-1.5 rounded-lg border border-stone-100">
+                            <span class="font-medium text-stone-800 truncate">${inv.familia} (${inv.cantPersonas})</span>
+                            <button onclick="liberarMesa('${inv.docId}')" class="text-stone-400 hover:text-red-500 text-xs px-1" title="Quitar de mesa">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    `).join("");
+                } else {
+                    listaOcupantesHTML = '<p class="text-[10px] text-stone-400 italic text-center py-2">Mesa vacía</p>';
+                }
+
+                cardMesa.innerHTML = `
+                    <div class="flex justify-between items-center border-b pb-1.5">
+                        <span class="font-bold text-xs text-stone-900 flex items-center gap-1.5">
+                            <i class="fa-solid fa-chair text-gold-600"></i> Mesa ${i}
+                        </span>
+                        <span class="text-[10px] font-bold ${ocupadosCount >= capacidadPorMesa ? 'text-red-600' : 'text-emerald-700'} bg-white px-2 py-0.5 rounded-md border border-stone-200">
+                            ${ocupadosCount} / ${capacidadPorMesa} Lugares
+                        </span>
+                    </div>
+                    <div class="space-y-1">
+                        ${listaOcupantesHTML}
+                    </div>
+                `;
+
+                grid.appendChild(cardMesa);
+            }
+        }
+
+        // Filtro de búsqueda en tiempo real
+        function filtrarListaRecepcion() {
+            const texto = document.getElementById('input-buscar-recepcion').value.toLowerCase();
+            const filtrados = listaConfirmados.filter(i => 
+                i.familia.toLowerCase().includes(texto) || i.nombre.toLowerCase().includes(texto)
+            );
+            renderizarListaRecepcion(filtrados);
+        }
+
+        // Modal para asignar/cambiar mesa
+        function abrirModalMesa(docId) {
+            const item = listaConfirmados.find(i => i.docId === docId);
+            if (!item) return;
+
+            document.getElementById('modal-familia-id').value = docId;
+            document.getElementById('modal-titulo-invitado').textContent = `Mesa para: ${item.familia}`;
+            document.getElementById('modal-pases-count').textContent = item.cantPersonas;
+
+            // Poblar select de mesas
+            const select = document.getElementById('select-numero-mesa');
+            select.innerHTML = "";
+            for (let i = 1; i <= totalMesas; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = `Mesa ${i}`;
+                if (parseInt(item.numMesa) === i) opt.selected = true;
+                select.appendChild(opt);
+            }
+
+            document.getElementById('modal-asignar-mesa').classList.remove('hidden');
+        }
+
+        function cerrarModalMesa() {
+            document.getElementById('modal-asignar-mesa').classList.add('hidden');
+        }
+
+        // Guardar mesa asignada en Firestore
+        async function confirmarAsignacionMesa(e) {
+            e.preventDefault();
+            const docId = document.getElementById('modal-familia-id').value;
+            const numMesaVal = parseInt(document.getElementById('select-numero-mesa').value);
+
+            try {
+                await db.collection("asistencias").doc(docId).update({
+                    numMesa: numMesaVal,
+                    sentado: true
+                });
+
+                cerrarModalMesa();
+                await cargarAsignaciones();
+            } catch (error) {
+                console.error("Error al asignar mesa:", error);
+                alert("Ocurrió un error al guardar la mesa.");
+            }
+        }
+
+        // Liberar o cambiar de mesa a un invitado
+        async function liberarMesa(docId) {
+            if (!confirm("¿Deseas quitar a esta familia de la mesa?")) return;
+
+            try {
+                await db.collection("asistencias").doc(docId).update({
+                    numMesa: null,
+                    sentado: false
+                });
+                await cargarAsignaciones();
+            } catch (error) {
+                console.error("Error al liberar mesa:", error);
+            }
+        }
+
+        function agregarMesa() {
+            totalMesas++;
+            renderizarMesas();
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            cargarAsignaciones();
+        });
+    </script>
+</body>
+</html>

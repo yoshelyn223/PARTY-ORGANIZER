@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Admin - Graduación Damaris</title>
+
+    <!-- Librería para generar archivos PDF en el navegador -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: {
+                            500: '#D4AF37',
+                            600: '#C5A059',
+                            700: '#A37F35',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-stone-100 font-sans text-stone-800 min-h-screen">
+
+    <!-- PANEL PRINCIPAL DE ADMINISTRACIÓN -->
+    <div id="panel-admin" class="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+
+        <!-- Encabezado -->
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-stone-200">
+            <div>
+                <h1 class="text-2xl font-bold text-stone-900">Panel de Control 🎓</h1>
+                <p class="text-xs text-stone-500">Gestión de RSVPs - Graduación Inge Damaris Esparza</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="cargarDatosAdmin()" class="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold py-2 px-3 rounded-xl border border-stone-300 flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-rotate"></i> Actualizar
+                </button>
+                <a href="https://damaris-graduation-invitation.netlify.app/" target="_blank" class="bg-gold-600 hover:bg-gold-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-globe"></i> Ver Invitación
+                </a>
+                <a href="mesas.html" target="_blank" class="bg-gold-600 hover:bg-gold-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-globe"></i> Ver mesas
+                </a>
+            </div>
+        </header>
+
+        <!-- TARJETAS DE MÉTRICAS / KPI -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-200">
+                <span class="text-xs font-bold text-stone-500 uppercase block">Total Familias</span>
+                <span id="stat-total-familias" class="text-2xl font-extrabold text-stone-900">0</span>
+            </div>
+            <div class="bg-emerald-50 p-4 rounded-2xl shadow-sm border border-emerald-200">
+                <span class="text-xs font-bold text-emerald-700 uppercase block">Confirmados (Pases)</span>
+                <span id="stat-pases-confirmados" class="text-2xl font-extrabold text-emerald-900">0</span>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-2xl shadow-sm border border-blue-200">
+                <span class="text-xs font-bold text-blue-700 uppercase block">Cancelados</span>
+                <span id="stat-cancelados" class="text-2xl font-extrabold text-blue-900">0</span>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-2xl shadow-sm border border-amber-200">
+                <span class="text-xs font-bold text-amber-700 uppercase block">Sin Responder</span>
+                <span id="stat-pendientes" class="text-2xl font-extrabold text-amber-900">0</span>
+            </div>
+        </div>
+
+        <!-- FILTROS Y BÚSQUEDA -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div class="relative w-full sm:w-72">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-stone-400 text-xs"></i>
+                <input type="text" id="busqueda-tabla" onkeyup="filtrarTabla()" placeholder="Buscar familia o nombre..." class="w-full bg-stone-50 border border-stone-300 rounded-xl pl-9 pr-3 py-2 text-xs focus:ring-2 focus:ring-gold-500 focus:outline-none">
+            </div>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <select id="filtro-estatus" onchange="filtrarTabla()" class="bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-medium text-stone-700 focus:outline-none">
+                    <option value="TODOS">Todos los estatus</option>
+                    <option value="CONFIRMADO">✅ Confirmados</option>
+                    <option value="CANCELADO">❌ Cancelados</option>
+                    <option value="PENDIENTE">⏳ Sin responder</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- TABLA DE INVITADOS -->
+        <div class="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="bg-stone-50 border-b border-stone-200 text-stone-500 font-bold uppercase tracking-wider">
+                        <th class="p-3">Familia / Invitado</th>
+                        <th class="p-3">Estatus</th>
+                        <th class="p-3">Pases Res. / Asignados</th>
+                        <th class="p-3">Confirmó</th>
+                        <th class="p-3">Mensaje</th>
+                        <th class="p-3 text-center">Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-body" class="divide-y divide-stone-100 text-stone-700">
+                    <tr>
+                        <td colspan="6" class="p-4 text-center text-stone-400">Cargando datos...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- MODAL DE EDICIÓN Y ACTUALIZACIÓN -->
+    <div id="modal-editar" class="fixed inset-0 bg-stone-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-stone-900 text-base" id="modal-titulo-familia">Editar Asistencia</h3>
+                <button onclick="cerrarModal()" class="text-stone-400 hover:text-stone-600 text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form id="form-admin-editar" onsubmit="guardarEdicionAdmin(event)" class="space-y-3">
+                <input type="hidden" id="edit-familia-nombre">
+
+                <div>
+                    <label class="block text-xs font-bold text-stone-700 mb-1">Estatus de Asistencia:</label>
+                    <select id="edit-asistencia" class="w-full border border-stone-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-gold-500 focus:outline-none">
+                        <option value="SI">✅ Confirmado (Asistirá)</option>
+                        <option value="NO">❌ Cancelado (No asistirá)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-stone-700 mb-1">Nombre de quien confirma / contacto:</label>
+                    <input type="text" id="edit-confirmante" required class="w-full border border-stone-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-gold-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-stone-700 mb-1">Cantidad de Personas / Pases a ocupar:</label>
+                    <input type="number" id="edit-cantidad" min="0" max="20" required class="w-full border border-stone-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-gold-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-stone-700 mb-1">Mensaje registrado:</label>
+                    <textarea id="edit-mensaje" rows="2" class="w-full border border-stone-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-gold-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="cerrarModal()" class="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-bold rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="btn-guardar-edit" class="px-4 py-2 bg-gold-600 hover:bg-gold-700 text-white text-xs font-bold rounded-xl transition">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT DE NAVEGACIÓN Y FIREBASE -->
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5plmv67UUs0pTDUzOgnqboRNU7RW2l4s",
+            authDomain: "graduacion-9f8b0.firebaseapp.com",
+            projectId: "graduacion-9f8b0",
+            storageBucket: "graduacion-9f8b0.firebasestorage.app",
+            messagingSenderId: "1096796639034",
+            appId: "1:1096796639034:web:2d58c06d67be95ce9d4a03",
+            measurementId: "G-F9KKD0LQGX"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        let listaCompletaAdmin = [];
+
+        // Cargar y cruzar información entre 'invitados_planeados' y 'asistencias'
+        async function cargarDatosAdmin() {
+            const tbody = document.getElementById('tabla-body');
+            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-stone-400"><i class="fa-solid fa-spinner animate-spin"></i> Cargando datos...</td></tr>';
+
+            try {
+                // 1. Obtener planeados
+                const planeadosSnap = await db.collection("invitados_planeados").get();
+                // 2. Obtener respuestas
+                const asistenciasSnap = await db.collection("asistencias").get();
+
+                const mapaRespuestas = {};
+                asistenciasSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.familia) {
+                        mapaRespuestas[data.familia.trim().toUpperCase()] = {
+                            docId: doc.id,
+                            ...data
+                        };
+                    }
+                });
+
+                listaCompletaAdmin = [];
+                let totalPasesConfirmados = 0;
+                let totalCancelados = 0;
+                let totalPendientes = 0;
+
+                planeadosSnap.forEach(doc => {
+                    const planeado = doc.data();
+                    const nombreFam = planeado.familia ? planeado.familia.trim() : "SIN NOMBRE";
+                    const pasesAsignados = planeado.pases || 2;
+                    const claveFam = nombreFam.toUpperCase();
+
+                    const respuesta = mapaRespuestas[claveFam];
+
+                    let item = {
+                        familia: nombreFam,
+                        pasesAsignados: pasesAsignados,
+                        estatus: "PENDIENTE",
+                        cantPersonas: 0,
+                        confirmadoPor: "-",
+                        mensaje: "-",
+                        docId: respuesta ? respuesta.docId : null
+                    };
+
+                    if (respuesta) {
+                        if (respuesta.asistencia) {
+                            item.estatus = "CONFIRMADO";
+                            item.cantPersonas = respuesta.cantPersonas || 0;
+                            totalPasesConfirmados += item.cantPersonas;
+                        } else {
+                            item.estatus = "CANCELADO";
+                            totalCancelados++;
+                        }
+                        item.confirmadoPor = respuesta.nombre || nombreFam;
+                        item.mensaje = respuesta.mensaje || "";
+                    } else {
+                        totalPendientes++;
+                    }
+
+                    listaCompletaAdmin.push(item);
+                });
+
+                // Actualizar métricas
+                document.getElementById('stat-total-familias').textContent = listaCompletaAdmin.length;
+                document.getElementById('stat-pases-confirmados').textContent = totalPasesConfirmados;
+                document.getElementById('stat-cancelados').textContent = totalCancelados;
+                document.getElementById('stat-pendientes').textContent = totalPendientes;
+
+                renderizarTabla(listaCompletaAdmin);
+
+            } catch (error) {
+                console.error("Error al cargar datos en admin:", error);
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Error al cargar información de Firestore.</td></tr>';
+            }
+        }
+// Función para generar y descargar el ticket en PDF desde el Admin
+function descargarTicketPDFAdmin(datosRSVP, docId) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [100, 150]
+    });
+
+    const folio = docId ? docId.substring(0, 8).toUpperCase() : "REG-2026";
+    const anchoPagina = 100;
+    const urlMaps = "https://maps.app.goo.gl/jXyJ49MQiifoLViq8";
+
+    // Fondo y Marco Dorado
+    doc.setFillColor(250, 249, 246);
+    doc.rect(0, 0, 100, 150, 'F');
+    doc.setDrawColor(212, 175, 55);
+    doc.setLineWidth(0.6);
+    doc.rect(5, 5, 90, 140);
+    doc.setDrawColor(230, 202, 126);
+    doc.setLineWidth(0.2);
+    doc.rect(6.5, 6.5, 87, 137);
+
+    // Encabezado
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(132, 98, 33);
+    doc.text("P A S E   D E   E N T R A D A", anchoPagina / 2, 15, { align: "center" });
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(26, 26, 26);
+    doc.text("Mi Graduación", anchoPagina / 2, 23, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(87, 83, 78);
+    doc.text("Inge Damaris Esparza", anchoPagina / 2, 29, { align: "center" });
+
+    doc.setDrawColor(212, 175, 55);
+    doc.setLineWidth(0.4);
+    doc.line(35, 33, 65, 33);
+
+    // Badge Estatus
+    doc.setFillColor(236, 253, 245);
+    doc.roundedRect(20, 37, 60, 7, 2, 2, 'F');
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(6, 95, 70);
+    doc.text("ASISTENCIA CONFIRMADA", anchoPagina / 2, 41.5, { align: "center" });
+
+    // Datos del Invitado
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 113, 108);
+    doc.text("FAMILIA / INVITADO", anchoPagina / 2, 51, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(26, 26, 26);
+    doc.text(String(datosRSVP.familia).toUpperCase(), anchoPagina / 2, 56, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 113, 108);
+    doc.text("CONFIRMADO POR", anchoPagina / 2, 63, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(26, 26, 26);
+    doc.text(String(datosRSVP.nombre || datosRSVP.familia), anchoPagina / 2, 68, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 113, 108);
+    doc.text("LUGARES RESERVADOS", anchoPagina / 2, 75, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(197, 160, 89);
+    doc.text(`${datosRSVP.cantPersonas} Persona(s)`, anchoPagina / 2, 80, { align: "center" });
+
+    doc.setDrawColor(231, 229, 228);
+    doc.setLineWidth(0.3);
+    doc.line(25, 84, 75, 84);
+
+    // Detalles del Evento
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(26, 26, 26);
+    doc.text("SÁBADO, 21 DE NOVIEMBRE DE 2026", anchoPagina / 2, 90, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(87, 83, 78);
+    doc.text("8:00 P.M.", anchoPagina / 2, 95, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(132, 98, 33);
+    doc.text("QUINTA GCL", anchoPagina / 2, 101, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 113, 108);
+    doc.text("C. Galicia, Villa Diamante, Torreón, Coah.", anchoPagina / 2, 105, { align: "center" });
+
+    // Enlace Google Maps
+    doc.setFillColor(245, 240, 225);
+    doc.roundedRect(22, 109, 56, 6.5, 1.5, 1.5, 'F');
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(132, 98, 33);
+    doc.text(" Ver ubicación en Google Maps", anchoPagina / 2, 113.5, { align: "center" });
+    doc.link(22, 109, 56, 6.5, { url: urlMaps });
+
+    // Folio y Pie
+    doc.setDrawColor(212, 175, 55);
+    doc.setLineWidth(0.4);
+    doc.line(30, 123, 70, 123);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(132, 98, 33);
+    doc.text(`FOLIO: #${folio}`, anchoPagina / 2, 129, { align: "center" });
+
+    const nombreLimpio = String(datosRSVP.familia).replace(/[^a-zA-Z0-9]/g, "_");
+    doc.save(`Pase_${nombreLimpio}.pdf`);
+}
+
+        // Renderizar filas de la tabla
+     // Renderizar filas de la tabla con botón de descarga PDF
+function renderizarTabla(lista) {
+    const tbody = document.getElementById('tabla-body');
+    tbody.innerHTML = "";
+
+    if (lista.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-stone-400">No se encontraron registros.</td></tr>';
+        return;
+    }
+
+    lista.forEach(item => {
+        let badgeEstatus = "";
+        if (item.estatus === "CONFIRMADO") {
+            badgeEstatus = '<span class="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full text-[10px]">✅ Confirmó</span>';
+        } else if (item.estatus === "CANCELADO") {
+            badgeEstatus = '<span class="bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full text-[10px]">❌ Canceló</span>';
+        } else {
+            badgeEstatus = '<span class="bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full text-[10px]">⏳ Sin Respuesta</span>';
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-stone-50 transition border-b border-stone-100";
+
+        // Botón de PDF habilitado únicamente si está CONFIRMADO
+        const btnPdfHTML = item.estatus === "CONFIRMADO" ? `
+            <button onclick="descargarTicketPDFAdmin({ familia: '${item.familia.replace(/'/g, "\\'")}', nombre: '${item.confirmadoPor.replace(/'/g, "\\'")}', cantPersonas: ${item.cantPersonas} }, '${item.docId || 'REG-2026'}')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold py-1.5 px-2.5 rounded-lg transition text-[11px] inline-flex items-center gap-1 border border-stone-300" title="Descargar Ticket PDF">
+                <i class="fa-solid fa-file-pdf text-red-600"></i> PDF
+            </button>
+        ` : '';
+
+        tr.innerHTML = `
+            <td class="p-3 font-bold text-stone-900">${item.familia}</td>
+            <td class="p-3">${badgeEstatus}</td>
+            <td class="p-3"><span class="font-bold text-stone-800">${item.cantPersonas}</span> / <span class="text-stone-400">${item.pasesAsignados}</span></td>
+            <td class="p-3 text-stone-600">${item.confirmadoPor}</td>
+            <td class="p-3 text-stone-500 italic max-w-xs truncate">${item.mensaje || "-"}</td>
+            <td class="p-3 text-center flex items-center justify-center gap-1.5">
+                ${btnPdfHTML}
+                <button onclick="abrirModalEdicion('${item.familia.replace(/'/g, "\\'")}')" class="bg-gold-100 hover:bg-gold-200 text-gold-800 font-bold py-1.5 px-3 rounded-lg transition text-[11px] inline-flex items-center gap-1">
+                    <i class="fa-solid fa-pen-to-square"></i> Editar
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+        // Filtros combinados de búsqueda y estatus
+        function filtrarTabla() {
+            const textoBusqueda = document.getElementById('busqueda-tabla').value.toLowerCase();
+            const estatusFiltro = document.getElementById('filtro-estatus').value;
+
+            const listaFiltrada = listaCompletaAdmin.filter(item => {
+                const coincideTexto = item.familia.toLowerCase().includes(textoBusqueda) || item.confirmadoPor.toLowerCase().includes(textoBusqueda);
+                const coincideEstatus = (estatusFiltro === "TODOS") || (item.estatus === estatusFiltro);
+                return coincideTexto && coincideEstatus;
+            });
+
+            renderizarTabla(listaFiltrada);
+        }
+
+        // Abrir Modal de Edición
+        function abrirModalEdicion(nombreFamilia) {
+            const item = listaCompletaAdmin.find(i => i.familia === nombreFamilia);
+            if (!item) return;
+
+            document.getElementById('modal-titulo-familia').textContent = `Editar: ${item.familia}`;
+            document.getElementById('edit-familia-nombre').value = item.familia;
+            document.getElementById('edit-asistencia').value = item.estatus === "CANCELADO" ? "NO" : "SI";
+            document.getElementById('edit-confirmante').value = item.confirmadoPor !== "-" ? item.confirmadoPor : item.familia;
+            document.getElementById('edit-cantidad').value = item.estatus === "CONFIRMADO" ? item.cantPersonas : item.pasesAsignados;
+            document.getElementById('edit-mensaje').value = item.mensaje !== "-" ? item.mensaje : "";
+
+            document.getElementById('modal-editar').classList.remove('hidden');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-editar').classList.add('hidden');
+        }
+
+        // Guardar o Actualizar cambios directamente en Firestore
+        async function guardarEdicionAdmin(e) {
+            e.preventDefault();
+
+            const btn = document.getElementById('btn-guardar-edit');
+            btn.disabled = true;
+            btn.textContent = "Guardando...";
+
+            const familia = document.getElementById('edit-familia-nombre').value;
+            const opcionAsistencia = document.getElementById('edit-asistencia').value;
+            const confirmante = document.getElementById('edit-confirmante').value;
+            const cantidad = parseInt(document.getElementById('edit-cantidad').value) || 0;
+            const mensaje = document.getElementById('edit-mensaje').value;
+
+            const esAsistenciaConfirmada = (opcionAsistencia === "SI");
+
+            const datosActualizados = {
+                familia: familia,
+                nombre: confirmante,
+                asistencia: esAsistenciaConfirmada,
+                cantPersonas: esAsistenciaConfirmada ? cantidad : 0,
+                mensaje: mensaje,
+                fechaRegistro: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                // Buscar si existe el documento en asistencias
+                const snap = await db.collection("asistencias").where("familia", "==", familia).get();
+
+                if (!snap.empty) {
+                    // Actualizar documento existente
+                    const docId = snap.docs[0].id;
+                    await db.collection("asistencias").doc(docId).set(datosActualizados, { merge: true });
+                } else {
+                    // Si estaba en PENDIENTE y el administrador le crea una respuesta
+                    await db.collection("asistencias").add(datosActualizados);
+                }
+
+                cerrarModal();
+                await cargarDatosAdmin(); // Recargar tabla y métricas
+                alert("✅ Registro actualizado correctamente.");
+            } catch (error) {
+                console.error("Error al guardar edición de admin:", error);
+                alert("Ocurrió un error al guardar los cambios.");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Guardar Cambios";
+            }
+        }
+
+        // Cargar datos automáticamente al abrir la página
+        document.addEventListener("DOMContentLoaded", () => {
+            cargarDatosAdmin();
+        });
+    </script>
+</body>
+</html>
